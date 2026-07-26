@@ -1,0 +1,93 @@
+import streamlit as st
+import numpy as np
+import tensorflow as tf
+from PIL import Image
+import cv2
+
+# ----- Config -----
+IMG_SIZE = 224 # must match what the model was trained on
+CLASS_NAMES = ['glioma', 'meningioma', 'notumor', 'pituitary'] # must match class_indices.json order exactly
+
+st.set_page_config(page_title="Brain Tumor MRI Classifier", layout="centered")
+st.title("🧠 Brain Tumor MRI Classifier")
+st.write("Upload a brain MRI scan and the model will predict the tumor type.")
+
+# ----- Load model (cached so it only loads once) -----
+@st.cache_resource
+def load_model():
+    return tf.keras.models.load_model("brain_tumor_model.keras")
+
+model = load_model()
+
+# ----- Grad-CAM helper -----
+def make_gradcam_heatmap(img_array, model, last_conv_layer_name):
+    grad_model = tf.keras.models.Model(
+        [model.inputs], [model.get_layer(last_conv_layer_name).output, model.output]
+    )
+    with tf.GradientTape() as tape:
+        conv_outputs, predictions = grad_model(img_array)
+        class_idx = tf.argmax(predictions[0])
+        loss = predictions[:, class_idx]
+    grads = tape.gradient(loss, conv_outputs)
+    pooled_grads = tf.reduce_mean(grads, axis=(0, 1, 2))
+    conv_outputs = conv_outputs[0]
+    heatmap = conv_outputs @ pooled_grads[..., tf.newaxis]
+    heatmap = tf.squeeze(heatmap)
+    heatmap = tf.maximum(heatmap, 0) / (tf.math.reduce_max(heatmap) + 1e-8)
+    return heatmap.numpy()
+
+def find_last_conv_layer(model):
+    for layer in reversed(model.layers):
+        if 'conv' in layer.name.lower():
+            return layer.name
+    return None
+
+# ----- File uploader -----
+uploaded_file = st.file_uploader("Choose an MRI image...", type=["jpg", "jpeg", "png"])
+
+if uploaded_file is not None:
+    img = Image.open(uploaded_file).convert("RGB")
+    st.image(img, caption="Uploaded MRI", use_column_width=True)
+
+    # Preprocess to match training pipeline
+    img_resized = img.resize((IMG_SIZE, IMG_SIZE))
+    img_array = np.array(img_resized) / 255.0
+    img_array = np.expand_dims(img_array, axis=0)
+
+    # ---- DEBUG: remove this block once predictions look correct ----
+    st.write("Input shape:", img_array.shape, "min:", img_array.min(), "max:", img_array.max())
+    # ------------------------------------------------------------------
+
+    # Predict
+    with st.spinner("Analyzing..."):
+        preds = model.predict(img_array)
+
+        # ---- DEBUG: remove this line once predictions look correct ----
+        st.write("Raw predictions:", preds)
+        # -------------------------------------------------------------
+
+        pred_idx = np.argmax(preds[0])
+        pred_class = CLASS_NAMES[pred_idx]
+        confidence = preds[0][pred_idx] * 100
+
+    st.subheader(f"Prediction: **{pred_class.upper()}**")
+    st.write(f"Confidence: {confidence:.2f}%")
+
+    # Show confidence for all classes
+    st.write("### All class probabilities")
+    for i, name in enumerate(CLASS_NAMES):
+        st.write(f"{name}: {preds[0][i]*100:.2f}%")
+        st.progress(float(preds[0][i]))
+
+    # Grad-CAM
+    st.write("### Grad-CAM: where the model focused")
+    last_conv_layer_name = find_last_conv_layer(model)
+    if last_conv_layer_name:
+        heatmap = make_gradcam_heatmap(img_array, model, last_conv_layer_name)
+        heatmap_resized = cv2.resize(heatmap, (IMG_SIZE, IMG_SIZE))
+        heatmap_color = cv2.applyColorMap(np.uint8(255 * heatmap_resized), cv2.COLORMAP_JET)
+        original = np.uint8(255 * img_array[0])
+        overlay = cv2.addWeighted(original, 0.6, heatmap_color, 0.4, 0)
+        st.image(overlay, caption="Grad-CAM heatmap", use_column_width=True)
+
+    st.caption("⚠️ This is a demo project for educational purposes only — not a medical diagnostic tool.")
