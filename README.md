@@ -3,6 +3,8 @@ A deep learning project that uses MRI scans to classify brain tumor into differe
 
 Here we have trained to classify the MRI scan into three categories:
 - Glioma: A type of tumor that originates in the glial cell of the brain
+  ![gradcam_glioma.png](https://github.com/sejalpandey30/brain-tumor-mri-classifier/gradcam_glioma.png)
+  
 - Meningioma: Tumors that arises from meninges
 - Pituitary: Tumor found in the pituitary glands which controls hormones
 
