@@ -15,9 +15,7 @@ st.set_page_config(page_title="Brain Tumor MRI Classifier", layout="centered")
 st.title("Brain Tumor MRI Classifier")
 st.write("Upload a brain MRI scan and the model will predict the tumor type.")
 
-@st.cache_resource
-def load_model():
-    return tf.keras.models.load_model("brain_tumor_model.keras")
+
 
 model = load_model()
 
