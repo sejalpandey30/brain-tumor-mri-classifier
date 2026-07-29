@@ -1,9 +1,12 @@
+import sys, os
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+from src.model import load_model
+from src.gradcam import make_gradcam_heatmap
 import streamlit as st
 import numpy as np
 import tensorflow as tf
 from PIL import Image
 import cv2
-
 
 IMG_SIZE = 224
 CLASS_NAMES = ['glioma', 'meningioma', 'notumor', 'pituitary']  # must match class_indices.json order
@@ -14,7 +17,7 @@ st.write("Upload a brain MRI scan and the model will predict the tumor type.")
 
 @st.cache_resource
 def load_model():
-    return tf.keras.models.load_model("results/brain_tumor_model.keras")
+    return tf.keras.models.load_model("brain_tumor_model.keras")
 
 model = load_model()
 
